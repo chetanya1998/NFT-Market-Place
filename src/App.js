@@ -1,13 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Moon, Sun, Zap, Unlock, Plus, User } from 'lucide-react';
-import { initializeApp } from 'firebase/app';
-import {
-    getFirestore, collection, doc, setDoc, onSnapshot, updateDoc,
-    addDoc, query, orderBy, serverTimestamp
-} from 'firebase/firestore';
-import {
-    getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken
-} from 'firebase/auth';
 
 // Constants & Data
 import { THEMES, INITIAL_DROPS } from './constants/data';
@@ -26,13 +18,10 @@ import CreatorView from './views/CreatorView';
 // Styles
 import './styles/index.css';
 
-// --- FIREBASE SETUP ---
-// Note: __firebase_config and __app_id are expected to be available globally in the prototype environment
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'unlock-protocol-default';
+// Mocks for local testing
+const auth = { currentUser: { uid: 'mock-user' } };
+const db = {};
+const appId = 'unlock-protocol-default';
 
 export default function App() {
     const [view, setView] = useState('landing');
@@ -43,10 +32,10 @@ export default function App() {
     const [filter, setFilter] = useState('All');
     const [inventory, setInventory] = useState([]);
     const [theme, setTheme] = useState('day'); // 'day' | 'night'
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState({ uid: 'mock-user' }); // Mock user
 
     // Gamification State
-    const [xp, setXp] = useState(0);
+    const [xp, setXp] = useState(150); // Start with some XP
     const [showXPToast, setShowXPToast] = useState({ visible: false, amount: 0 });
     const [showConfetti, setShowConfetti] = useState(false);
 
@@ -54,62 +43,23 @@ export default function App() {
     const [verifyCode, setVerifyCode] = useState('');
     const [verifyStatus, setVerifyStatus] = useState('idle');
 
-    // Chat State
-    const [chatMessages, setChatMessages] = useState([]);
+    // Chat State (Mocked)
+    const [chatMessages, setChatMessages] = useState([
+        { id: 1, text: "WAGMI! This drop is fire.", user: "0x123...", dropId: 1 },
+        { id: 2, text: "Can't wait for the Berlin tour.", user: "0x456...", dropId: 1 }
+    ]);
 
     const themeStyles = THEMES[theme];
 
-    // --- FIREBASE AUTH & SYNC ---
     useEffect(() => {
-        const initAuth = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
-            }
-        };
-        initAuth();
-        const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
-        return () => unsubscribe();
+        console.log("Firebase is currently DISABLED for local UI testing.");
     }, []);
 
-    // Listen for User Profile Updates
-    useEffect(() => {
-        if (!user) return;
-        const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main');
-        const unsub = onSnapshot(userRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setXp(data.xp || 0);
-                setInventory(data.inventory || []);
-            } else {
-                setDoc(userRef, { xp: 0, inventory: [] });
-            }
-        }, (err) => console.log("Profile Sync Error", err));
-        return () => unsub();
-    }, [user]);
-
-    // Listen for Chat Messages
-    useEffect(() => {
-        if (!user) return;
-        const q = query(
-            collection(db, 'artifacts', appId, 'public', 'data', 'chat_messages'),
-            orderBy('timestamp', 'asc')
-        );
-        const unsub = onSnapshot(q, (snapshot) => {
-            const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setChatMessages(msgs);
-        }, (err) => console.log("Chat Sync Error", err));
-        return () => unsub();
-    }, [user]);
-
-    // --- ACTIONS ---
-    const gainXP = async (amount) => {
-        if (!user) return;
+    // --- ACTIONS (MOCKED) ---
+    const gainXP = (amount) => {
         const newXP = xp + amount;
+        setXp(newXP);
         setShowXPToast({ visible: true, amount });
-        const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main');
-        await updateDoc(userRef, { xp: newXP });
     };
 
     const connectWallet = async () => {
@@ -131,15 +81,11 @@ export default function App() {
         }
     };
 
-    const handleMint = async (dropId) => {
-        if (!user) return;
+    const handleMint = (dropId) => {
         const newInventory = [...inventory, dropId];
         setInventory(newInventory);
         gainXP(100);
         setShowConfetti(true);
-
-        const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'main');
-        await updateDoc(userRef, { inventory: newInventory });
 
         setTimeout(() => {
             setShowConfetti(false);
@@ -147,14 +93,16 @@ export default function App() {
         }, 2000);
     };
 
-    const handleChatSubmit = async (dropId, text) => {
-        if (!user || !text.trim()) return;
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'chat_messages'), {
+    const handleChatSubmit = (dropId, text) => {
+        if (!text.trim()) return;
+        const newMsg = {
+            id: Date.now(),
             text,
             user: userAddress.substring(0, 6) + "...",
             dropId,
-            timestamp: serverTimestamp()
-        });
+            timestamp: new Date()
+        };
+        setChatMessages(prev => [...prev, newMsg]);
     };
 
     const handleVote = (dropId, optionIndex) => {
